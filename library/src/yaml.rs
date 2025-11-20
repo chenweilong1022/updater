@@ -14,10 +14,6 @@ pub struct YamlConfig {
     pub auto_update: Option<bool>,
     /// Base64-encoded public key for verifying patch hash signatures.
     pub patch_public_key: Option<String>,
-    /// Proxy URL for network requests. Supports SOCKS5 proxy format:
-    /// - socks5://127.0.0.1:1080 (no authentication)
-    /// - socks5://username:password@127.0.0.1:1080 (with authentication)
-    pub proxy_url: Option<String>,
 }
 
 impl YamlConfig {

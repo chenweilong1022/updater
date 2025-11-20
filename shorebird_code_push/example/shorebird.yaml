@@ -12,11 +12,3 @@ app_id: 1692ba14-0c8d-490e-9593-13815d2ac1cf
 # https://pub.dev/packages/shorebird_code_push
 # Uncomment the following line to disable automatic updates.
 auto_update: false
-
-# proxy_url configures a SOCKS5 proxy for network requests.
-# This is useful if you need to access Shorebird servers through a proxy (e.g., in regions with network restrictions).
-# Supports two formats:
-#   - socks5://127.0.0.1:1080 (no authentication)
-#   - socks5://username:password@127.0.0.1:1080 (with authentication)
-# Uncomment and configure the following line to enable proxy:
-# proxy_url: socks5://127.0.0.1:1080

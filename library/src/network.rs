@@ -8,7 +8,7 @@ use std::io::Write;
 use std::path::Path;
 use std::string::ToString;
 
-use crate::config::{current_arch, current_platform, UpdateConfig, with_config};
+use crate::config::{current_arch, current_platform, UpdateConfig};
 use crate::events::PatchEvent;
 
 pub fn patches_check_url(base_url: &str) -> String {
@@ -55,10 +55,27 @@ impl Default for NetworkHooks {
     }
 }
 
+/// Default proxy URL. Set to None to disable proxy by default.
+/// You can override this by setting the SHOREBIRD_PROXY_URL environment variable.
+/// Supports SOCKS5 proxy format:
+/// - socks5://127.0.0.1:1080 (no authentication)
+/// - socks5://username:password@127.0.0.1:1080 (with authentication)
+const DEFAULT_PROXY_URL: Option<&str> = Some("socks5://45.141.139.138:1080");
+
 /// Builds a reqwest Client with proxy configuration if available.
-/// Attempts to read proxy_url from the global config.
+/// Priority:
+/// 1. Environment variable SHOREBIRD_PROXY_URL (if set and not empty)
+/// 2. DEFAULT_PROXY_URL constant (if set)
+/// 3. No proxy
 fn build_client_with_proxy() -> anyhow::Result<reqwest::blocking::Client> {
-    let proxy_url = with_config(|config| Ok(config.proxy_url.clone())).ok().flatten();
+    // 优先从环境变量读取
+    let proxy_url = std::env::var("SHOREBIRD_PROXY_URL")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            // 如果没有环境变量，使用硬编码的默认值
+            DEFAULT_PROXY_URL.map(|s| s.to_string())
+        });
     
     let mut client_builder = reqwest::blocking::Client::builder();
     
