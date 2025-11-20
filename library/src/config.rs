@@ -85,6 +85,7 @@ pub struct UpdateConfig {
     pub network_hooks: NetworkHooks,
     pub file_provider: Box<dyn ExternalFileProvider>,
     pub patch_public_key: Option<String>,
+    pub proxy_url: Option<String>,
 }
 
 /// Returns Ok if the config was set successfully, Err if it was already set.
@@ -127,6 +128,7 @@ pub fn set_config(
             network_hooks,
             file_provider,
             patch_public_key: yaml.patch_public_key.to_owned(),
+            proxy_url: yaml.proxy_url.to_owned(),
         };
         shorebird_debug!("Updater configured with: {:?}", new_config);
         *config = Some(new_config);
@@ -195,6 +197,7 @@ mod tests {
             auto_update: Some(true),
             base_url: Some("fake_base_url".to_string()),
             patch_public_key: None,
+            proxy_url: None,
         }
     }
 
@@ -219,6 +222,7 @@ mod tests {
                 auto_update: Some(true),
                 base_url: Some("fake_base_url".to_string()),
                 patch_public_key: Some("patch_public_key".to_string()),
+                proxy_url: None,
             },
             NetworkHooks::default(),
         )?;

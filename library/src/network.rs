@@ -8,7 +8,7 @@ use std::io::Write;
 use std::path::Path;
 use std::string::ToString;
 
-use crate::config::{current_arch, current_platform, UpdateConfig};
+use crate::config::{current_arch, current_platform, UpdateConfig, with_config};
 use crate::events::PatchEvent;
 
 pub fn patches_check_url(base_url: &str) -> String {
@@ -55,12 +55,31 @@ impl Default for NetworkHooks {
     }
 }
 
+/// Builds a reqwest Client with proxy configuration if available.
+/// Attempts to read proxy_url from the global config.
+fn build_client_with_proxy() -> anyhow::Result<reqwest::blocking::Client> {
+    let proxy_url = with_config(|config| Ok(config.proxy_url.clone())).ok().flatten();
+    
+    let mut client_builder = reqwest::blocking::Client::builder();
+    
+    if let Some(proxy_url_str) = proxy_url {
+        if !proxy_url_str.is_empty() {
+            shorebird_info!("Using proxy: {}", proxy_url_str);
+            let proxy = reqwest::Proxy::all(&proxy_url_str)
+                .with_context(|| format!("Failed to create proxy from URL: {}", proxy_url_str))?;
+            client_builder = client_builder.proxy(proxy);
+        }
+    }
+    
+    Ok(client_builder.build()?)
+}
+
 pub fn patch_check_request_default(
     url: &str,
     request: PatchCheckRequest,
 ) -> anyhow::Result<PatchCheckResponse> {
     shorebird_info!("Sending patch check request: {:?}", request);
-    let client = reqwest::blocking::Client::new();
+    let client = build_client_with_proxy()?;
     let result = client.post(url).json(&request).send();
     let response = handle_network_result(result)?.json()?;
     shorebird_debug!("Patch check response: {:?}", response);
@@ -68,7 +87,7 @@ pub fn patch_check_request_default(
 }
 
 pub fn download_file_default(url: &str) -> anyhow::Result<Vec<u8>> {
-    let client = reqwest::blocking::Client::new();
+    let client = build_client_with_proxy()?;
     let result = client.get(url).send();
     let response = handle_network_result(result)?;
     let bytes = response.bytes()?;
@@ -77,7 +96,7 @@ pub fn download_file_default(url: &str) -> anyhow::Result<Vec<u8>> {
 }
 
 pub fn report_event_default(url: &str, request: CreatePatchEventRequest) -> anyhow::Result<()> {
-    let client = reqwest::blocking::Client::new();
+    let client = build_client_with_proxy()?;
     let result = client.post(url).json(&request).send();
     handle_network_result(result)?;
     Ok(())
