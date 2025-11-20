@@ -77,30 +77,58 @@ fn build_client_with_proxy() -> anyhow::Result<reqwest::blocking::Client> {
             DEFAULT_PROXY_URL.map(|s| s.to_string())
         });
     
-    let mut client_builder = reqwest::blocking::Client::builder();
+    let mut client_builder = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30)) // 设置超时时间
+        .connect_timeout(std::time::Duration::from_secs(10)); // 设置连接超时
     
-    if let Some(proxy_url_str) = proxy_url {
+    if let Some(proxy_url_str) = &proxy_url {
         if !proxy_url_str.is_empty() {
-            shorebird_info!("Using proxy: {}", proxy_url_str);
-            let proxy = reqwest::Proxy::all(&proxy_url_str)
-                .with_context(|| format!("Failed to create proxy from URL: {}", proxy_url_str))?;
-            client_builder = client_builder.proxy(proxy);
+            shorebird_info!("Configuring proxy: {}", proxy_url_str);
+            
+            // 验证代理 URL 格式
+            if !proxy_url_str.starts_with("socks5://") && !proxy_url_str.starts_with("http://") && !proxy_url_str.starts_with("https://") {
+                shorebird_info!("Warning: Proxy URL format may be incorrect. Expected format: socks5://host:port or http://host:port");
+            }
+            
+            match reqwest::Proxy::all(proxy_url_str) {
+                Ok(proxy) => {
+                    client_builder = client_builder.proxy(proxy);
+                    shorebird_info!("Proxy configured successfully: {}", proxy_url_str);
+                }
+                Err(e) => {
+                    shorebird_info!("Failed to configure proxy {}: {}. Continuing without proxy.", proxy_url_str, e);
+                    // 如果代理配置失败，继续不使用代理
+                }
+            }
         }
+    } else {
+        shorebird_info!("No proxy configured, using direct connection");
     }
     
-    Ok(client_builder.build()?)
+    match client_builder.build() {
+        Ok(client) => {
+            shorebird_info!("HTTP client built successfully");
+            Ok(client)
+        }
+        Err(e) => {
+            bail!("Failed to build HTTP client: {}", e)
+        }
+    }
 }
 
 pub fn patch_check_request_default(
     url: &str,
     request: PatchCheckRequest,
 ) -> anyhow::Result<PatchCheckResponse> {
-    shorebird_info!("Sending patch check request: {:?}", request);
+    shorebird_info!("Sending patch check request to: {}", url);
+    shorebird_info!("Request payload: {:?}", request);
     let client = build_client_with_proxy()?;
     let result = client.post(url).json(&request).send();
-    let response = handle_network_result(result)?.json()?;
-    shorebird_debug!("Patch check response: {:?}", response);
-    Ok(response)
+    let response = handle_network_result(result)?;
+    shorebird_info!("Received response with status: {}", response.status());
+    let parsed_response = response.json()?;
+    shorebird_debug!("Patch check response: {:?}", parsed_response);
+    Ok(parsed_response)
 }
 
 pub fn download_file_default(url: &str) -> anyhow::Result<Vec<u8>> {
@@ -135,11 +163,23 @@ fn handle_network_result(
                 bail!("Request failed with status: {}", response.status())
             }
         }
-        Err(e) => match e.source() {
-            Some(source) if source.to_string().contains("client error (Connect)") => {
-                bail!("Patch check request failed due to network error. Please check your internet connection.");
+        Err(e) => {
+            // 记录详细的错误信息以便调试
+            let error_msg = format!("Network request failed: {}", e);
+            shorebird_info!("{}", error_msg);
+            
+            // 检查是否是连接错误
+            if let Some(source) = e.source() {
+                let source_str = source.to_string();
+                if source_str.contains("client error (Connect)") || 
+                   source_str.contains("connection") ||
+                   source_str.contains("timeout") {
+                    bail!("Network connection failed: {}. Original error: {}", source_str, e);
+                }
             }
-            _ => bail!(e),
+            
+            // 返回完整错误信息
+            bail!("Network error: {}", e)
         },
     }
 }
